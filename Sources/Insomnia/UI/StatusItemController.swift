@@ -74,6 +74,27 @@ final class StatusItemController: NSObject {
         super.init()
         installHostingView()
         observeManager()
+        startAgentAwakePolling()
+    }
+
+    // MARK: Claude Code agent-awake
+
+    private var agentAwakeTimer: Timer?
+
+    private func startAgentAwakePolling() {
+        refreshAgentAwake()
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAgentAwake() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        agentAwakeTimer = timer
+    }
+
+    private func refreshAgentAwake() {
+        let active = AgentAwake.isActive()
+        guard active != model.agentAwake else { return }
+        model.agentAwake = active
+        Log.info("agent-awake \(active ? "on" : "off")")
     }
 
     // MARK: Status item

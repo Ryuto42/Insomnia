@@ -80,6 +80,11 @@ final class SessionManager {
 
     let store: Store
     let paths: Paths
+    /// Only the real install coexists with agent-awake; a relocated layout
+    /// (tests, INSOMNIA_HOME) never reads the user's ~/.claude.
+    private var agentAwakeActive: Bool {
+        paths.appSupport == Paths.standard.appSupport && AgentAwake.isActive()
+    }
     private let sleepGuard: any SleepGuarding
     private let processControl: any ProcessSignaling
     private let backstop: any BackstopScheduling
@@ -626,7 +631,11 @@ final class SessionManager {
     /// Failures are logged and the entry is left set so the next end,
     /// reconcile or the backstop retries it.
     func restoreAll() async {
-        if state.sleepDisabledByUs {
+        if state.sleepDisabledByUs, agentAwakeActive {
+            AgentAwake.handOff()
+            try? journal { $0.sleepDisabledByUs = false }
+            Log.info("sleep left disabled: a Claude Code agent is working (handed off to agent-awake)")
+        } else if state.sleepDisabledByUs {
             do {
                 try await sleepGuard.setSleepDisabled(false)
                 try? journal { $0.sleepDisabledByUs = false }
@@ -936,6 +945,10 @@ final class SessionManager {
             if try await sleepGuard.isSleepDisabled() {
                 guard session == nil else {
                     Log.info("reconcile: a session started meanwhile; leaving SleepDisabled")
+                    return
+                }
+                if agentAwakeActive {
+                    Log.info("reconcile: SleepDisabled is held by a Claude Code agent; leaving it")
                     return
                 }
                 Log.info("reconcile: pmset reports SleepDisabled with no session, clearing")

@@ -37,6 +37,11 @@
   <img src="docs/assets/session-flow.svg" alt="Illustrated menu-bar controls: enter Days, Hours, and Minutes, watch the countdown, and hold the end control to finish early. Click the eye or countdown to add time. Closing the lid is optional, and incomplete recovery needs attention." width="880">
 </p>
 
+> **This is a fork of [krishhgg/Insomnia](https://github.com/krishhgg/Insomnia).**
+> It adds [Claude Code agent support](#optional-extras): the Mac stays awake
+> while an agent works, and the menu bar eye opens. Everything else matches
+> upstream v0.1.0.
+
 ## Install
 
 Requires **macOS 26 or later**. Building from source also needs **Xcode with
@@ -255,6 +260,62 @@ when the lid is closed. Insomnia detects supported running browsers missing
 and offers **Relaunch [browser] unthrottled** in the right-click menu. Relaunch
 preserves browser profile arguments. This is not a guarantee that every web
 app will keep working while the lid is closed.
+
+</details>
+
+<details>
+<summary><strong>Claude Code agents (this fork)</strong></summary>
+
+[`scripts/agent-awake.sh`](scripts/agent-awake.sh) is a set of Claude Code
+hooks that keep the Mac awake only while an agent is working, without an
+Insomnia session. While any agent holds the Mac awake, the menu bar eye stays
+open.
+
+- A prompt or tool call adds a hold for that session and runs
+  `pmset -a disablesleep 1` through Insomnia's sudoers rule.
+- Stop, StopFailure, SessionEnd, and an idle prompt remove the hold. With no
+  hold left, the script clears `disablesleep`, but only if it set it.
+- A background watchdog runs every 30 seconds while holds exist. It drops a hold
+  when its Claude Code process has exited, when the transcript shows an
+  interrupt (Esc does not run the Stop hook), when a final reply has been
+  unchanged for 5 minutes, or after 3 hours with no tool call. On battery at
+  10% or less, it drops every hold.
+- During an Insomnia session the script leaves `disablesleep` to Insomnia. If
+  an Insomnia session ends while an agent is still working, Insomnia leaves
+  sleep disabled and hands the cleanup to the script.
+
+The lid actions (display off, app freezing) still apply only to Insomnia
+sessions. With sleep disabled, closing the lid does not turn the display off on
+its own.
+
+Install Insomnia first (the script needs its sudoers rule). Then:
+
+```bash
+mkdir -p ~/.claude/hooks
+cp scripts/agent-awake.sh ~/.claude/hooks/agent-awake.sh
+```
+
+Add the hooks to `~/.claude/settings.json`, merging them with any existing
+`hooks` entries:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh acquire", "timeout": 15 }] }],
+    "PreToolUse":       [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh acquire", "timeout": 15 }] }],
+    "PostToolUse":      [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh acquire", "timeout": 15 }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh release", "timeout": 15 }] }],
+    "StopFailure":      [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh release", "timeout": 15 }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh release", "timeout": 15 }] }],
+    "Notification":     [{ "matcher": "idle_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/agent-awake.sh release", "timeout": 15 }] }]
+  }
+}
+```
+
+Check the state with `~/.claude/hooks/agent-awake.sh status`. If sleep ever
+stays disabled, run `~/.claude/hooks/agent-awake.sh reset`. State and the log
+live in `~/.claude/agent-awake/`. Remove the hooks before uninstalling
+Insomnia: without the sudoers rule, the script cannot change `pmset`.
 
 </details>
 

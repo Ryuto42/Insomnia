@@ -61,6 +61,9 @@ final class MenuBarModel {
     static let startFailedText = "Couldn\u{2019}t start"
 
     var phase: Phase = .idle
+    /// A Claude Code agent holds the Mac awake (~/.claude/agent-awake/holds
+    /// is not empty). Opens the eye without an Insomnia session.
+    var agentAwake: Bool = false
     /// Concise start failure shown beside the pills; cleared on the next
     /// commit, open or collapse.
     var startError: String?

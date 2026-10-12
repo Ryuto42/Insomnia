@@ -46,7 +46,7 @@ struct StatusRootView: View {
     /// The eye opens the moment Enter starts a session, not when the manager
     /// confirms it: the blink is the first thing that answers the keystroke.
     /// A refused start closes it again with the pills coming back.
-    private var eyeOpen: Bool { isRunning || model.phase == .starting }
+    private var eyeOpen: Bool { isRunning || model.phase == .starting || model.agentAwake }
 
     private var countdownText: String {
         Self.countdownText(pending: model.pendingCountdown, live: manager.countdownText, phase: model.phase)
